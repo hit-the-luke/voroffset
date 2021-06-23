@@ -26,8 +26,7 @@ endfunction()
 ## Eigen
 function(voroffset_download_eigen)
 	voroffset_download_project(eigen
-		URL     http://bitbucket.org/eigen/eigen/get/3.3.7.tar.gz
-		URL_MD5 f2a417d083fe8ca4b8ed2bc613d20f07
+		URL     https://github.com/eigenteam/eigen-git-mirror/archive/3.3.7.tar.gz
 	)
 endfunction()
 

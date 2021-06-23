@@ -15,6 +15,16 @@ cmake ..
 make -j8
 ```
 
+### Note
+To compile on windows you have to remove  
+```
+-Wno-implicit-fallthrough 
+-Wno-missing-field-initializers 
+-Wno-unused-parameter 
+-Wno-keyword-macro 
+```
+from additional options for project tbb_static
+
 ### Running the code
 
 See possible options with:
