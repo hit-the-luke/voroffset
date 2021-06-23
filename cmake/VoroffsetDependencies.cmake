@@ -66,7 +66,7 @@ if(VOROFFSET_WITH_TBB AND NOT TARGET tbb::tbb)
 	voroffset_download_tbb()
 	add_subdirectory(${VOROFFSET_EXTERNAL}/tbb tbb)
 	set_property(TARGET tbb_static tbb_def_files PROPERTY FOLDER "dependencies")
-	set_target_properties(tbb_static PROPERTIES COMPILE_FLAGS "-Wno-implicit-fallthrough -Wno-missing-field-initializers -Wno-unused-parameter -Wno-keyword-macro")
+	# set_target_properties(tbb_static PROPERTIES COMPILE_FLAGS "-Wno-implicit-fallthrough -Wno-missing-field-initializers -Wno-unused-parameter -Wno-keyword-macro")
 
 	add_library(voroffset_tbb INTERFACE)
 	target_include_directories(voroffset_tbb SYSTEM INTERFACE ${VOROFFSET_EXTERNAL}/tbb/include)
