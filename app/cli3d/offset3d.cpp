@@ -17,11 +17,11 @@
 #include <vector>
 ////////////////////////////////////////////////////////////////////////////////
 
-int main(int argc, char * argv[]) {
+int main(int argc, char* argv[]) {
 	// Default arguments
 	struct {
 		std::string input;
-		std::string output_mesh = "output.obj";
+		std::string output_mesh = "output.off";
 		std::string output_json = "";
 		std::string method = "ours";
 		std::string operation = "dilation";
@@ -32,6 +32,7 @@ int main(int argc, char * argv[]) {
 		unsigned int num_thread = std::max(1u, std::thread::hardware_concurrency());
 		bool force = false;
 		bool radius_in_mm = false;
+		double min_radius = 0;
 	} args;
 
 	// Parse arguments
@@ -44,14 +45,16 @@ int main(int argc, char * argv[]) {
 	app.add_option("-p,--padding", args.padding, "Padding (in #dexels)");
 	app.add_option("-t,--num_thread", args.num_thread, "Number of threads", true);
 	app.add_option("-r,--radius", args.radius, "Dilation/erosion radius (in #dexels)", true);
-	app.add_set("-m,--method", args.method, {"ours","brute_force"}, "The method to use");
-	app.add_set("-x,--apply", args.operation, {"noop","dilation","erosion","closing","opening"},
+	app.add_option("-l,--min_radius", args.min_radius, "minimal radius for eroded parts", true);
+	app.add_set("-m,--method", args.method, { "ours","brute_force" }, "The method to use");
+	app.add_set("-x,--apply", args.operation, { "noop","dilation","erosion","closing","opening" },
 		"Morphological operation to apply", true);
 	app.add_flag("-f,--force", args.force, "Overwrite output file");
 	app.add_flag("-u,--radius_in_mm", args.radius_in_mm, "Radius is given in mm instead");
 	try {
 		app.parse(argc, argv);
-	} catch (const CLI::ParseError &e) {
+	}
+	catch (const CLI::ParseError& e) {
 		return app.exit(e);
 	}
 
@@ -78,7 +81,12 @@ int main(int argc, char * argv[]) {
 	GEO::Logger::out("Stats") << "Origin (in mm): " << input.origin().transpose() << std::endl;
 	GEO::Logger::out("Stats") << "Extent (in mm): " << input.extent().transpose() << std::endl;
 	GEO::Logger::out("Stats") << "Radius (in #dexels): " << args.radius << std::endl;
+	GEO::Logger::out("Stats") << "Radius_min(in #dexels): " << args.min_radius << std::endl;
 	GEO::Logger::out("Stats") << "Number of threads: " << args.num_thread << std::endl;
+	GEO::Logger::out("Stats") << "Method: " << args.method << std::endl;
+#ifdef USE_TBB
+	GEO::Logger::out("Stats") << "Using TBB" << std::endl;
+#endif
 
 	if (!args.output_json.empty()) {
 		json_data = {
@@ -95,18 +103,20 @@ int main(int argc, char * argv[]) {
 		};
 	}
 
-	#ifdef USE_TBB
+#ifdef USE_TBB
 	tbb::task_scheduler_init init(args.num_thread);
-	#endif
+#endif
 
 	// Create offset operator
 	GEO::Logger::div("Offseting");
 	std::unique_ptr<vor3d::VoronoiMorpho> op;
 	if (args.method == "ours") {
 		op = std::make_unique<vor3d::VoronoiMorphoVorPower>();
-	} else if (args.method == "brute_force") {
+	}
+	else if (args.method == "brute_force") {
 		op = std::make_unique<vor3d::VoronoiMorphoBruteForce>();
-	} else {
+	}
+	else {
 		GEO::Logger::err("Offset") << "Invalid method: " << args.method << std::endl;
 		return 1;
 	}
@@ -115,23 +125,41 @@ int main(int argc, char * argv[]) {
 	// Apply operation
 	if (args.operation == "noop") {
 		output = input;
-	} else if (args.operation == "erosion") {
-		GEO::Stopwatch W("Erosion");
-		op->erosion(input, output, args.radius, time_1, time_2);
-	} else if (args.operation == "dilation") {
+	}
+	else if (args.operation == "erosion") {
+		if (args.min_radius == 0) {
+			GEO::Stopwatch W("Erosion");
+			op->erosion(input, output, args.radius, time_1, time_2);
+		}
+		else {
+			vor3d::CompressedVolume tmp;
+			{
+				GEO::Stopwatch W("Erosion");
+				op->erosion(input, tmp, args.radius + args.min_radius, time_1, time_2);
+			}
+			{
+				GEO::Stopwatch W("Dilation(min_radius)");
+				op->dilation(tmp, output, args.min_radius, time_1, time_2);
+			}
+		}
+	}
+	else if (args.operation == "dilation") {
 		GEO::Stopwatch W("Dilation");
 		op->dilation(input, output, args.radius, time_1, time_2);
-	} else if (args.operation == "closing") {
+	}
+	else if (args.operation == "closing") {
 		GEO::Stopwatch W("Closing");
 		vor3d::CompressedVolume tmp;
 		op->dilation(input, tmp, args.radius, time_1, time_2);
 		op->erosion(tmp, output, args.radius, time_1, time_2);
-	} else if (args.operation == "opening") {
+	}
+	else if (args.operation == "opening") {
 		GEO::Stopwatch W("Opening");
 		vor3d::CompressedVolume tmp;
 		op->erosion(input, tmp, args.radius, time_1, time_2);
 		op->dilation(tmp, output, args.radius, time_1, time_2);
-	} else {
+	}
+	else {
 		throw std::invalid_argument("Operation");
 	}
 
@@ -143,10 +171,12 @@ int main(int argc, char * argv[]) {
 				GEO::Logger::out("Save") << "Overwriting output file: " << args.output_mesh << std::endl;
 				GEO::Stopwatch W("Save");
 				vor3d::dexel_dump(args.output_mesh, output);
-			} else {
+			}
+			else {
 				GEO::Logger::out("Save") << "Output mesh already exists. Please use -f to force overwriting." << std::endl;
 			}
-		} else {
+		}
+		else {
 			GEO::Stopwatch W("Save");
 			std::ofstream out(args.output_mesh.c_str());
 			vor3d::dexel_dump(args.output_mesh, output);
@@ -167,10 +197,12 @@ int main(int argc, char * argv[]) {
 				GEO::Logger::out("Save") << "Overwriting output file: " << args.output_json << std::endl;
 				std::ofstream o(args.output_json);
 				o << std::setw(4) << json_data << std::endl;
-			} else {
+			}
+			else {
 				GEO::Logger::out("Save") << "Output json already exists. Please use -f to force overwriting." << std::endl;
 			}
-		} else {
+		}
+		else {
 			std::ofstream o(args.output_json);
 			o << std::setw(4) << json_data << std::endl;
 		}

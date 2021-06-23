@@ -309,12 +309,51 @@ void points_dump(const std::string &filename, const voroffset3d::CompressedVolum
 	GEO::mesh_save(mesh, filename);
 }
 
-void voroffset3d::dexel_dump(const std::string &filename, const CompressedVolume &dexels)
+void points_bin_dump(const std::string& filename, const voroffset3d::CompressedVolume& dexels)
 {
-	if (endswith(filename, ".xyz")) {
-		points_dump(filename, dexels);
-		return;
+	std::vector<double> vertices;
+	// GEO::vec3 diff[8] = {
+	// 	GEO::vec3(0,0,1), GEO::vec3(1,0,1), GEO::vec3(1,1,1), GEO::vec3(0,1,1),
+	// 	GEO::vec3(0,0,0), GEO::vec3(0,1,0), GEO::vec3(1,1,0), GEO::vec3(1,0,0),
+	// };
+	double diff[24] = { 0 };
+	{
+		std::cout << "vector creation start" << std::endl;
+		GEO::Stopwatch q("Writing Output Vector");
+		std::cout << "origin" << dexels.origin() << std::endl;
+		for (int y = 0; y < dexels.gridSize()[1]; ++y) {
+			diff[1] = diff[4] = diff[13] = diff[22] = dexels.origin()[1] + y * dexels.spacing();
+			diff[7] = diff[10] = diff[16] = diff[19] = dexels.origin()[1] + (y + 1) * dexels.spacing();
+			for (int x = 0; x < dexels.gridSize()[0]; ++x) {
+				diff[0] = diff[9] = diff[12] = diff[15] = dexels.origin()[0] + x * dexels.spacing();
+				diff[3] = diff[6] = diff[18] = diff[21] = dexels.origin()[0] + (x + 1) * dexels.spacing();
+				// todo: Heiligengeistfeld with n = 600 and x = noop produces an error at y = 385 and x = 599 dexels.at(385,599).size() = 1 -> uneven
+				// if (y == 385 && x > 590){
+				// 	std::cout << x << ' ';
+				// 	std::cout << dexels.at(x, y).size() << std::endl;
+				// }
+				for (unsigned int i = 0; i < dexels.at(x, y).size(); i += 2) {
+					// if(y == 385 && x > 598){
+					// 	std::cout << dexels.at(x, y).size() << '  i:' << i << std::endl;
+					// }
+					diff[2] = diff[5] = diff[8] = diff[11] = dexels.at(x, y)[i + 1] * dexels.spacing();
+					diff[14] = diff[17] = diff[20] = diff[23] = dexels.at(x, y)[i] * dexels.spacing();
+					vertices.insert(vertices.end(), diff, diff + 24);
+				}
+			}
+		}
 	}
+	{
+		std::cout << "saving Vector" << std::endl;
+		GEO::Stopwatch q("Dumping Binary");
+		auto myfile = std::fstream(filename, std::ios::out | std::ios::binary);
+		myfile.write((char*)&vertices[0], vertices.size() * sizeof(double));
+		myfile.close();
+	}
+}
+
+void mesh_dump(const std::string& filename, const voroffset3d::CompressedVolume& dexels)
+{
 	GEO::Mesh mesh;
 
 	for (int y = 0; y < dexels.gridSize()[1]; ++y) {
@@ -346,7 +385,19 @@ void voroffset3d::dexel_dump(const std::string &filename, const CompressedVolume
 	mesh.cells.compute_borders();
 	mesh.cells.connect();
 	mesh.vertices.remove_isolated();
-
 	GEO::mesh_save(mesh, filename);
+}
+
+void voroffset3d::dexel_dump(const std::string& filename, const CompressedVolume& dexels)
+{
+	if (endswith(filename, ".xyz")) {
+		points_dump(filename, dexels);
+	}
+	else if (endswith(filename, ".binary")) {
+		points_bin_dump(filename, dexels);
+	}
+	else {
+		mesh_dump(filename, dexels);
+	}
 }
 
