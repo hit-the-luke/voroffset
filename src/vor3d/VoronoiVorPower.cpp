@@ -1,4 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
+#define USE_TBB
 #include "vor3d/VoronoiVorPower.h"
 #include "vor3d/Morpho2D.h"
 #include "vor3d/SeparatePower2D.h"

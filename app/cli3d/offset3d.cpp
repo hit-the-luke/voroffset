@@ -1,4 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
+#define USETBB
 #include <vor3d/CompressedVolume.h>
 #include <vor3d/VoronoiVorPower.h>
 #include <vor3d/VoronoiBruteForce.h>
